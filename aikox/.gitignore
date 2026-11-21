@@ -1,0 +1,5 @@
+# Los iconos de la marca si van al repositorio (el .gitignore raiz ignora png y svg)
+!*.png
+!*.svg
+!*.ico
+!*.bmp
