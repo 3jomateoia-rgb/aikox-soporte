@@ -1,9 +1,10 @@
 name: AIKOX Soporte - Windows
 
-# Compila AIKOX Soporte (RustDesk con la marca AIKOX) para Windows de 64 bits.
+# Compila AIKOX Soporte (RustDesk con la marca AIKOX) para Windows de 64 bits,
+# en dos ediciones: "cliente" (solo recibir ayuda) y "tecnico" (completa).
 # Solo se lanza a mano: pestana Actions > "AIKOX Soporte - Windows" > Run workflow.
-# Resultado: AIKOXSoporte-<version>.exe (portable) y AIKOXSoporte-<version>.msi
-# en la pestana Releases y como artefacto de la ejecucion.
+# Resultado (Releases y artefactos): AIKOXSoporte-<v>.msi/.exe y
+# AIKOXSoporteTecnico-<v>.msi/.exe (el .exe es la version portable).
 
 on:
   workflow_dispatch:
@@ -24,8 +25,6 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
   VERSION: "1.5.3"
-  NOMBRE: "AIKOXSoporte"
-  NOMBRE_VISIBLE: "AIKOX Soporte"
   EMPRESA: "AIKOX Informatica y Publicidad"
 
 jobs:
@@ -36,7 +35,9 @@ jobs:
         with:
           submodules: recursive
       - name: Comprobar que la marca se puede aplicar
-        run: python3 aikox/aplicar_marca.py --check
+        run: |
+          python3 aikox/aplicar_marca.py cliente --check
+          python3 aikox/aplicar_marca.py tecnico --check
 
   generate-bridge:
     needs: [comprobar-marca]
@@ -53,9 +54,22 @@ jobs:
       target_version: Windows10
 
   windows:
-    name: Windows x64
+    name: Windows x64 (${{ matrix.edicion }})
     needs: [generate-bridge, build-RustDeskTempTopMostWindow]
     runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - edicion: cliente
+            nombre: AIKOXSoporte
+            visible: "AIKOX Soporte"
+          - edicion: tecnico
+            nombre: AIKOXSoporteTecnico
+            visible: "AIKOX Soporte Técnico"
+    env:
+      NOMBRE: ${{ matrix.nombre }}
+      NOMBRE_VISIBLE: ${{ matrix.visible }}
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -70,7 +84,7 @@ jobs:
           submodules: recursive
 
       - name: Aplicar la marca AIKOX
-        run: python aikox/aplicar_marca.py
+        run: python aikox/aplicar_marca.py ${{ matrix.edicion }}
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -114,7 +128,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
-          prefix-key: windows-2022-aikox
+          prefix-key: windows-2022-aikox-${{ matrix.edicion }}
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -211,11 +225,22 @@ jobs:
       - name: Subir como artefacto
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: AIKOXSoporte-windows-x64
+          name: ${{ matrix.nombre }}-windows-x64
           path: ./Salida
 
-      - name: Publicar en Releases
-        if: ${{ inputs.publicar }}
+  publicar:
+    name: Publicar en Releases
+    needs: [windows]
+    if: ${{ inputs.publicar }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Descargar lo compilado
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ./Salida
+          merge-multiple: true
+
+      - name: Publicar
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           tag_name: aikox-${{ env.VERSION }}-${{ github.run_number }}
@@ -223,8 +248,11 @@ jobs:
           prerelease: true
           body: |
             AIKOX Soporte, basado en RustDesk ${{ env.VERSION }} (AGPL-3.0). Codigo fuente: este repositorio.
+            Para clientes (solo recibir ayuda):
             - AIKOXSoporte-${{ env.VERSION }}.msi: instalador para Windows de 64 bits.
             - AIKOXSoporte-${{ env.VERSION }}.exe: version portable (sin instalar).
+            Para los tecnicos de AIKOX (completa):
+            - AIKOXSoporteTecnico-${{ env.VERSION }}.msi / .exe
             Sin firmar.
           files: |
             ./Salida/*.msi

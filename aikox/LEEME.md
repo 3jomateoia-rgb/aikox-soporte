@@ -4,6 +4,14 @@ Programa de asistencia remota de **AIKOX Informática y Publicidad**, basado en
 [RustDesk](https://github.com/rustdesk/rustdesk) 1.5.3 (licencia AGPL-3.0).
 Este repositorio es el código fuente completo de la versión con la marca AIKOX.
 
+## Dos ediciones
+- **cliente** (`AIKOXSoporte`, «AIKOX Soporte»): solo recibir ayuda; sin
+  ajustes, libreta ni cuentas.
+- **tecnico** (`AIKOXSoporteTecnico`, «AIKOX Soporte Técnico»): completa.
+
+Cada una sale como instalador `.msi` y como portable `.exe`.
+`python aikox/aplicar_marca.py cliente|tecnico` aplica la edición elegida.
+
 ## Qué cambia respecto a RustDesk
 - Nombre «AIKOX Soporte» (nombre interno `AIKOXSoporte`, sin espacios porque
   se usa para el servicio de Windows y para el enlace `aikoxsoporte://`).

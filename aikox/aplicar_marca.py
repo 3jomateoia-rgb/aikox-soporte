@@ -4,8 +4,9 @@
 Se ejecuta en GitHub Actions justo despues de descargar el codigo (y se puede
 ejecutar en local para comprobarlo):
 
-    python aikox/aplicar_marca.py           # aplica los cambios
-    python aikox/aplicar_marca.py --check   # solo comprueba que todo se encuentra
+    python aikox/aplicar_marca.py cliente           # aplica la edicion "cliente"
+    python aikox/aplicar_marca.py tecnico           # aplica la edicion "tecnico"
+    python aikox/aplicar_marca.py cliente --check   # solo comprueba
 
 Todos los datos salen de aikox/marca.json. Cada cambio busca un texto exacto:
 si una version nueva de RustDesk lo cambia, el script se para con un error
@@ -19,9 +20,14 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 MARCA = json.loads((RAIZ / "aikox" / "marca.json").read_text(encoding="utf-8"))
 SOLO_COMPROBAR = "--check" in sys.argv
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+EDICION = ARGS[0] if ARGS else "cliente"
+if EDICION not in MARCA["ediciones"]:
+    sys.exit(f"Edicion desconocida: {EDICION} (validas: {', '.join(MARCA['ediciones'])})")
+ED = MARCA["ediciones"][EDICION]
 
-INTERNO = MARCA["nombre_interno"]
-VISIBLE = MARCA["nombre_visible"]
+INTERNO = ED["nombre_interno"]
+VISIBLE = ED["nombre_visible"]
 errores = []
 hechos = 0
 
@@ -91,26 +97,21 @@ cambiar(CFG, 'pub const LINK_DOCS_HOME: &str = "https://rustdesk.com/docs/en/";'
 # ---------------------------------------------------------------- 2. Configuracion incrustada
 # Mismo formato que el custom.txt del generador oficial, pero dentro del
 # programa y sin firma (lo compilamos nosotros).
+ajustes = {
+    # Servidor fijo: el cliente no puede cambiarlo.
+    "custom-rendezvous-server": MARCA["servidor_id"],
+    "relay-server": MARCA["servidor_relay"],
+    "key": MARCA["clave"],
+}
+ajustes.update(MARCA["ajustes_comunes"])
+ajustes.update(ED["ajustes"])
 cliente = {
     "app-name": INTERNO,
-    "override-settings": {
-        # Servidor fijo: el cliente no puede cambiarlo.
-        "custom-rendezvous-server": MARCA["servidor_id"],
-        "relay-server": MARCA["servidor_relay"],
-        "key": MARCA["clave"],
-        # Sin avisos ni descargas de rustdesk.com.
-        "enable-check-update": "N",
-        "allow-auto-update": "N",
-        # Ajustes que el cliente no debe tocar.
-        "hide-server-settings": "Y",
-        "hide-proxy-settings": "Y",
-        "hide-websocket-settings": "Y",
-        "hide-powered-by-me": "Y",
-    },
-    "default-settings": {
-        "theme": "light",
-    },
+    "override-settings": ajustes,
+    "default-settings": {"theme": "light"},
 }
+# Claves fuera de default/override = ajustes fijos (conn-type, disable-settings...).
+cliente.update(ED["fijos"])
 escribir("aikox/cliente.json", json.dumps(cliente, ensure_ascii=False, indent=2) + "\n")
 
 COMMON = "src/common.rs"
@@ -171,7 +172,7 @@ SET = "flutter/lib/desktop/pages/desktop_setting_page.dart"
 cambiar(SET, "launchUrlString('https://rustdesk.com/privacy.html');", f"launchUrlString('{MARCA['privacidad']}');")
 cambiar(SET, "launchUrlString('https://rustdesk.com');", f"launchUrlString('{MARCA['web']}');")
 cambiar(SET, "decoration: const BoxDecoration(color: Color(0xFF2c8cff)),",
-        f"decoration: const BoxDecoration(color: Color(0xFF{MARCA['color_marino'].upper()})),")
+        f"decoration: const BoxDecoration(color: Color(0xFF{MARCA['color_principal'].upper()})),")
 # Licencia AGPL: se mantiene el copyright de RustDesk y se anade el enlace al codigo.
 cambiar(SET, "'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\\n$license',",
         "'" + dart_str(f"{VISIBLE} · {MARCA['empresa']}") + "\\n"
@@ -183,7 +184,7 @@ cambiar("flutter/lib/desktop/pages/desktop_home_page.dart", "Uri.parse('https://
 
 # ---------------------------------------------------------------- 5. Ejecutable de Windows (VERSIONINFO)
 RC = "flutter/windows/runner/Runner.rc"
-cambiar(RC, 'VALUE "FileDescription", "RustDesk Remote Desktop" "\\0"', f'VALUE "FileDescription", "{MARCA["descripcion"]}" "\\0"')
+cambiar(RC, 'VALUE "FileDescription", "RustDesk Remote Desktop" "\\0"', f'VALUE "FileDescription", "{ED["descripcion"]}" "\\0"')
 cambiar(RC, 'VALUE "InternalName", "rustdesk" "\\0"', f'VALUE "InternalName", "{INTERNO}" "\\0"')
 cambiar(RC, 'VALUE "OriginalFilename", "rustdesk.exe" "\\0"', f'VALUE "OriginalFilename", "{INTERNO}.exe" "\\0"')
 cambiar(RC, 'VALUE "ProductName", "RustDesk" "\\0"', f'VALUE "ProductName", "{VISIBLE}" "\\0"')
@@ -212,4 +213,4 @@ if errores:
     for e in errores:
         print("  -", e)
     sys.exit(1)
-print(f"Marca AIKOX {'comprobada' if SOLO_COMPROBAR else 'aplicada'}: {hechos} cambios.")
+print(f"Marca AIKOX ({EDICION}: {VISIBLE}) {'comprobada' if SOLO_COMPROBAR else 'aplicada'}: {hechos} cambios.")

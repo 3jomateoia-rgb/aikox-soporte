@@ -1,15 +1,50 @@
 {
-  "nombre_interno": "AIKOXSoporte",
-  "nombre_visible": "AIKOX Soporte",
   "empresa": "AIKOX Informática y Publicidad",
-  "descripcion": "AIKOX Soporte - asistencia remota",
   "web": "https://aikox.com",
   "privacidad": "https://aikox.com",
+  "incidencias": "https://aikox.com/incidencias",
+  "telefono": "94 497 08 96",
   "codigo_fuente": "https://github.com/3jomateoia-rgb/aikox-soporte",
   "servidor_id": "0nqlzjh.cserverhost.cloud",
   "servidor_relay": "0nqlzjh.cserverhost.cloud",
   "clave": "t3q60neo32v6juG751nGkiyIsD7QbHE0avO8VvjXJSk=",
   "color_acento": "2563EB",
-  "color_acento_claro": "3B82F6",
-  "color_marino": "0F1F3D"
+  "color_principal": "0A0A0A",
+
+  "ajustes_comunes": {
+    "lang": "es",
+    "enable-check-update": "N",
+    "allow-auto-update": "N",
+    "hide-server-settings": "Y",
+    "hide-proxy-settings": "Y",
+    "hide-websocket-settings": "Y",
+    "hide-powered-by-me": "Y"
+  },
+
+  "ediciones": {
+    "cliente": {
+      "nombre_interno": "AIKOXSoporte",
+      "nombre_visible": "AIKOX Soporte",
+      "descripcion": "AIKOX Soporte - asistencia remota",
+      "ajustes": {
+        "hide-security-settings": "Y",
+        "hide-network-settings": "Y",
+        "hide-remote-printer-settings": "Y",
+        "hide-stop-service": "Y"
+      },
+      "fijos": {
+        "conn-type": "incoming",
+        "disable-settings": "Y",
+        "disable-ab": "Y",
+        "disable-account": "Y"
+      }
+    },
+    "tecnico": {
+      "nombre_interno": "AIKOXSoporteTecnico",
+      "nombre_visible": "AIKOX Soporte Técnico",
+      "descripcion": "AIKOX Soporte Técnico - asistencia remota",
+      "ajustes": {},
+      "fijos": {}
+    }
+  }
 }
