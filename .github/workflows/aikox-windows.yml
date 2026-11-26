@@ -5,6 +5,9 @@ name: AIKOX Soporte - Windows
 # Solo se lanza a mano: pestana Actions > "AIKOX Soporte - Windows" > Run workflow.
 # Resultado (Releases y artefactos): AIKOXSoporte-<v>.msi/.exe y
 # AIKOXSoporteTecnico-<v>.msi/.exe (el .exe es la version portable).
+# Firma: Azure Artifact Signing (cuenta aikox-firma, perfil aikox-publico),
+# editor "SADEN5 ASOCIADOS S.L.". Acceso por OIDC con los secrets
+# AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID (solo rama aikox).
 
 on:
   workflow_dispatch:
@@ -13,9 +16,14 @@ on:
         description: "Publicar en Releases (si no, solo artefacto)"
         type: boolean
         default: true
+      firmar:
+        description: "Firmar digitalmente (Azure Artifact Signing)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
+  id-token: write
 
 env:
   RUST_VERSION: "1.75"
@@ -26,6 +34,9 @@ env:
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
   VERSION: "1.5.3"
   EMPRESA: "AIKOX Informatica y Publicidad"
+  FIRMA_ENDPOINT: "https://weu.codesigning.azure.net/"
+  FIRMA_CUENTA: "aikox-firma"
+  FIRMA_PERFIL: "aikox-publico"
 
 jobs:
   comprobar-marca:
@@ -188,6 +199,39 @@ jobs:
           mv ./rustdesk/rustdesk.exe "./rustdesk/${{ env.NOMBRE }}.exe"
           Get-ChildItem ./rustdesk | Select-Object Name, Length
 
+      - name: Iniciar sesion en Azure (firma)
+        if: ${{ inputs.firmar }}
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Lista de programas sin firmar
+        if: ${{ inputs.firmar }}
+        run: |
+          # Solo los .exe/.dll que no traen firma propia (los controladores de terceros ya vienen firmados).
+          $base = (Resolve-Path ./rustdesk).Path
+          $lista = Get-ChildItem $base -Recurse -Include *.exe,*.dll |
+            Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -eq 'NotSigned' } |
+            ForEach-Object { 'rustdesk' + $_.FullName.Substring($base.Length) }
+          $lista | Set-Content -Path ./firmar-programas.txt -Encoding utf8
+          Write-Host "Se firmaran $($lista.Count) archivos:"; $lista
+
+      - name: Firmar los programas
+        if: ${{ inputs.firmar }}
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
+        with:
+          endpoint: ${{ env.FIRMA_ENDPOINT }}
+          signing-account-name: ${{ env.FIRMA_CUENTA }}
+          certificate-profile-name: ${{ env.FIRMA_PERFIL }}
+          files-catalog: ${{ github.workspace }}\firmar-programas.txt
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: ${{ matrix.visible }}
+          description-url: https://aikox.com
+
       - name: Find Runner.res
         continue-on-error: true
         shell: bash
@@ -220,7 +264,35 @@ jobs:
           $msi = Get-ChildItem ./Package/bin/*/Release/*/Package.msi | Select-Object -First 1
           popd
           mv $msi.FullName "./Salida/${{ env.NOMBRE }}-${{ env.VERSION }}.msi"
-          Get-FileHash ./Salida/* -Algorithm SHA256 | Format-List
+
+      - name: Firmar el portable y el msi
+        if: ${{ inputs.firmar }}
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
+        with:
+          endpoint: ${{ env.FIRMA_ENDPOINT }}
+          signing-account-name: ${{ env.FIRMA_CUENTA }}
+          certificate-profile-name: ${{ env.FIRMA_PERFIL }}
+          files-folder: ${{ github.workspace }}\Salida
+          files-folder-filter: exe,msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: ${{ matrix.visible }}
+          description-url: https://aikox.com
+
+      - name: Comprobar las firmas
+        if: ${{ inputs.firmar }}
+        run: |
+          $mal = 0
+          Get-ChildItem ./Salida/* | ForEach-Object {
+            $f = Get-AuthenticodeSignature $_.FullName
+            Write-Host "$($_.Name): $($f.Status) - $($f.SignerCertificate.Subject)"
+            if ($f.Status -ne 'Valid') { $mal++ }
+          }
+          if ($mal -gt 0) { throw "Hay $mal archivo(s) sin firma valida" }
+
+      - name: Huellas SHA256
+        run: Get-FileHash ./Salida/* -Algorithm SHA256 | Format-List
 
       - name: Subir como artefacto
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -253,7 +325,7 @@ jobs:
             - AIKOXSoporte-${{ env.VERSION }}.exe: version portable (sin instalar).
             Para los tecnicos de AIKOX (completa):
             - AIKOXSoporteTecnico-${{ env.VERSION }}.msi / .exe
-            Sin firmar.
+            ${{ inputs.firmar && 'Firmado digitalmente por SADEN5 ASOCIADOS S.L. (AIKOX).' || 'Sin firmar.' }}
           files: |
             ./Salida/*.msi
             ./Salida/*.exe
